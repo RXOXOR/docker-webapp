@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+    tools {
+        maven 'mymaven'
+    }
+    stages {
+        stage('code') {
+            steps {
+                git 'https://github.com/RXOXOR/docker-webappfordocker.git'
+            }
+        }
+        stage('CQA') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh "mvn clean verify sonar:sonar -Dsonar.projectKey=project"
+                }
+            }
+        }
+        stage('build') {
+            steps {
+                sh 'mvn clean package'
+                sh 'cp -r target Docker-app'
+            }
+        }
+        stage('artifact'){
+            steps {
+                nexusArtifactUploader artifacts: [[artifactId: 'vprofile', classifier: 'debug', file: 'target/vprofile-v2.war', type: 'war']], credentialsId: 'creds', groupId: 'com.visualpathit', nexusUrl: '52.87.166.135:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'myrepo', version: 'v2'
+            }
+        }
+        stage('image') {
+            steps {
+                sh 'docker build -t myapp Docker-app'
+                sh 'docker build -t database Docker-db'
+            }
+        }
+        stage ('deploy') {
+            steps {
+                sh 'docker run -d --name devopsdb -p 3306:3306 database'
+                sh 'docker run -d --name 3tierapp -p 7823:8080 --link devopsdb:3tier myapp'
+            }
+        }
+    }
+}
